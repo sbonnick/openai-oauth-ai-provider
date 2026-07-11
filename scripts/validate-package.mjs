@@ -26,6 +26,8 @@ try {
     'dist/index.js',
     'dist/index.d.ts',
     'dist/core.js',
+    'dist/codex-client.js',
+    'dist/codex-client.d.ts',
     'dist/ai-sdk.js',
     'dist/tanstack-provider.js',
     'src/index.ts',
@@ -68,7 +70,9 @@ try {
   );
   await writeFile(
     join(consumerDirectory, 'core.mjs'),
-    `import ${JSON.stringify(`${manifest.name}/core`)};\n`,
+    [`${manifest.name}/core`, `${manifest.name}/codex`]
+      .map((specifier) => `import ${JSON.stringify(specifier)};`)
+      .join('\n'),
   );
   await execute('node', ['core.mjs'], { cwd: consumerDirectory });
 
@@ -86,7 +90,12 @@ try {
   );
   await writeFile(
     join(consumerDirectory, 'all.mjs'),
-    [manifest.name, `${manifest.name}/ai-sdk`, `${manifest.name}/tanstack`]
+    [
+      manifest.name,
+      `${manifest.name}/codex`,
+      `${manifest.name}/ai-sdk`,
+      `${manifest.name}/tanstack`,
+    ]
       .map((specifier) => `import ${JSON.stringify(specifier)};`)
       .join('\n'),
   );

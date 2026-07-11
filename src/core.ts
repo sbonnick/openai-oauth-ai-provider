@@ -18,6 +18,8 @@ export {
   type AuthenticatedFetchOptions,
 } from './authenticated-fetch.js';
 export {
+  CodexError,
+  type CodexErrorCode,
   OpenAIOAuthError,
   type OpenAIOAuthErrorCode,
 } from './errors.js';

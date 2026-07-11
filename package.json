@@ -29,6 +29,10 @@
       "types": "./dist/tanstack-provider.d.ts",
       "import": "./dist/tanstack-provider.js"
     },
+    "./codex": {
+      "types": "./dist/codex-client.d.ts",
+      "import": "./dist/codex-client.js"
+    },
     "./package.json": "./package.json"
   },
   "engines": {
@@ -61,7 +65,7 @@
     "lint": "biome lint .",
     "pack:check": "node scripts/validate-package.mjs",
     "prepack": "npm run build",
-    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/auth.test.js .test-dist/tests/provider.test.js .test-dist/tests/tanstack.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/auth.test.js .test-dist/tests/codex.test.js .test-dist/tests/provider.test.js .test-dist/tests/tanstack.test.js",
     "typecheck": "tsc -p tsconfig.json"
   },
   "peerDependencies": {

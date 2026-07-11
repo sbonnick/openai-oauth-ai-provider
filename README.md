@@ -113,6 +113,33 @@ Run the included login example:
 npm run example:login
 ```
 
+## Codex utilities
+
+Use the standalone Codex client for authenticated account and catalog data that
+does not belong to an AI SDK or TanStack AI adapter:
+
+```ts
+import { OpenAIOAuth } from 'openai-oauth-ai-provider/core';
+import { codex } from 'openai-oauth-ai-provider/codex';
+
+const auth = new OpenAIOAuth();
+const client = codex({ auth });
+const models = await client.listCodexModels();
+const usage = await client.getCodexUsage();
+const accountStatus = await client.getCodexAccountStatus();
+
+console.log(models.map((model) => model.slug));
+console.log(usage, accountStatus);
+```
+
+`listCodexModels()` requests the model catalog available to the signed-in
+account. `getCodexUsage()` returns the plan, quota, and rate-limit payload, and
+`getCodexAccountStatus()` returns account eligibility data. Usage and account
+payloads are deliberately typed as JSON objects because the private backend
+schema changes independently of this package. All three operations use the same
+credential refresh, workspace routing, and one-`401` retry behavior as model
+requests.
+
 ## Vercel AI SDK 7
 
 ### Generate and stream text
@@ -292,12 +319,14 @@ Applications using both SDKs can share one token manager:
 ```ts
 import {
   OpenAIOAuth,
+  codex,
   createOpenAIOAuthProvider,
   openaiOAuthText,
 } from 'openai-oauth-ai-provider';
 
 const auth = new OpenAIOAuth();
 
+const codexClient = codex({ auth });
 const aiSdkProvider = createOpenAIOAuthProvider({ auth });
 const tanstackAdapter = openaiOAuthText('gpt-5.4', { auth });
 ```
