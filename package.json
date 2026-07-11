@@ -1,0 +1,75 @@
+{
+  "name": "openai-outh-ai-provider",
+  "version": "0.1.0",
+  "description": "OpenAI OAuth provider for AI SDK 7 and TanStack AI backed by the Codex Responses endpoint",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/ai-sdk.d.ts",
+      "import": "./dist/ai-sdk.js"
+    },
+    "./tanstack": {
+      "types": "./dist/tanstack-provider.d.ts",
+      "import": "./dist/tanstack-provider.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
+    "example:generate": "tsc -p tsconfig.examples.json && node .examples-dist/examples/generate.js",
+    "example:login": "tsc -p tsconfig.examples.json && node .examples-dist/examples/device-login.js",
+    "example:mcp": "tsc -p tsconfig.examples.json && node .examples-dist/examples/remote-mcp.js",
+    "example:tanstack": "tsc -p tsconfig.examples.json && node .examples-dist/examples/tanstack.js",
+    "example:tools": "tsc -p tsconfig.examples.json && node .examples-dist/examples/tools.js",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/auth.test.js .test-dist/tests/provider.test.js .test-dist/tests/tanstack.test.js",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.11",
+    "@tanstack/ai-openai": "^0.16.0"
+  },
+  "peerDependencies": {
+    "@ai-sdk/provider": "^4.0.3",
+    "@tanstack/ai": "^0.40.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "^4.0.3",
+    "@biomejs/biome": "^2.5.3",
+    "@tanstack/ai": "^0.40.0",
+    "@types/node": "^24.0.0",
+    "ai": "^7.0.20",
+    "typescript": "^5.9.0"
+  },
+  "keywords": [
+    "ai-sdk",
+    "chatgpt",
+    "codex",
+    "oauth",
+    "openai",
+    "provider"
+  ],
+  "license": "MIT"
+}
