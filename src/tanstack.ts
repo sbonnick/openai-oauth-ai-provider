@@ -53,6 +53,7 @@ export class OpenAIOAuthTextAdapter extends OpenAITextAdapter<OpenAIChatModel> {
         apiKey: 'managed-by-openai-oauth',
         baseURL,
         fetch: createAuthenticatedFetch(auth, {
+          allowedOrigins: [baseURL],
           ...(fetch === undefined ? {} : { fetch }),
           originator,
         }),

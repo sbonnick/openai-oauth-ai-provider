@@ -1,0 +1,27 @@
+name: Backend compatibility regression
+description: Report a change in the private Codex backend or an upstream adapter
+title: '[Compatibility]: '
+labels:
+  - compatibility
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials or full authenticated payloads. Capabilities can vary by plan and workspace.
+  - type: textarea
+    id: change
+    attributes:
+      label: Observed change
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Package and SDK versions
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted reproduction or upstream reference
+    validations:
+      required: true

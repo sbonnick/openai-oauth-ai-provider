@@ -1,4 +1,4 @@
-# openai-outh-ai-provider
+# openai-oauth-ai-provider
 
 OpenAI OAuth authentication and AI-provider adapters for either:
 
@@ -12,6 +12,9 @@ to `https://chatgpt.com/backend-api/codex`.
 The runtime uses Node built-ins plus the official provider implementation for
 each SDK: `@ai-sdk/openai` and `@tanstack/ai-openai`.
 
+This is an unofficial community project. It is not affiliated with or endorsed
+by OpenAI, Vercel, or TanStack.
+
 ## Important status
 
 The ChatGPT Codex backend is not the public OpenAI Platform API. This package
@@ -21,6 +24,12 @@ payload requirements can change. Use it only with accounts and subscriptions
 you are authorized to use, and follow applicable OpenAI terms and workspace
 policies.
 
+Prompts, messages, files, skills, tool inputs, and model configuration supplied
+to an adapter are sent to the ChatGPT Codex backend. Remote MCP servers are a
+separate trust boundary and may receive data selected by the model or your
+application. Data retention, workspace controls, availability, quota, and
+billing are controlled by those external services and your account policies.
+
 Hosted capabilities such as remote MCP, uploaded skills, shell containers,
 images, audio, and embeddings remain controlled by the signed-in ChatGPT plan
 and backend. Client-side tools and client-side MCP do not depend on those
@@ -29,6 +38,7 @@ hosted capabilities.
 ## Requirements
 
 - Node.js 22.18 or newer
+- an ESM application (`import`; CommonJS `require` is not supported)
 - a ChatGPT account with Codex access
 - AI SDK 7 or TanStack AI 0.40+
 
@@ -37,29 +47,29 @@ hosted capabilities.
 For AI SDK 7:
 
 ```sh
-npm install openai-outh-ai-provider ai @ai-sdk/provider
+npm install openai-oauth-ai-provider ai @ai-sdk/provider @ai-sdk/openai
 ```
 
 For TanStack AI:
 
 ```sh
-npm install openai-outh-ai-provider @tanstack/ai
+npm install openai-oauth-ai-provider @tanstack/ai @tanstack/ai-openai zod
 ```
 
 For this source checkout:
 
 ```sh
-npm install
+npm ci
 npm run check
 ```
 
 Use the adapter-specific entry point for applications that only use one SDK:
 
-- `openai-outh-ai-provider/ai-sdk` exports authentication plus the AI SDK
+- `openai-oauth-ai-provider/ai-sdk` exports authentication plus the AI SDK
   provider without loading the TanStack adapter.
-- `openai-outh-ai-provider/tanstack` exports authentication plus the TanStack
+- `openai-oauth-ai-provider/tanstack` exports authentication plus the TanStack
   adapter without loading the AI SDK provider.
-- `openai-outh-ai-provider/core` exports only authentication, token stores, and
+- `openai-oauth-ai-provider/core` exports only authentication, token stores, and
   shared utilities.
 
 The root entry point continues to export everything for compatibility and for
@@ -72,7 +82,7 @@ graph and give bundlers deterministic entry points.
 Authentication is shared by both adapters:
 
 ```ts
-import { OpenAIOAuth } from 'openai-outh-ai-provider/core';
+import { OpenAIOAuth } from 'openai-oauth-ai-provider/core';
 
 const auth = new OpenAIOAuth();
 
@@ -85,11 +95,17 @@ await auth.loginWithDeviceCode({
 
 Credentials are stored separately from Codex CLI by default. This prevents two
 processes from racing to rotate the same refresh token. Override the location
-with `OPENAI_OAUTH_AUTH_FILE` or provide a custom `TokenStore`.
+with `OPENAI_OAUTH_AUTH_FILE` or provide a custom `TokenStore`. The override
+must be an absolute path; never place the token file inside a source repository
+or synchronized folder.
 
 Every request refreshes a token within five minutes of expiry. A `401` causes
 one forced refresh and one retry. Concurrent refreshes in a process are
 deduplicated.
+
+Cancel an in-progress login with an `AbortSignal`, and remove persisted
+credentials with `await auth.logout()`. If a refresh token is revoked or the
+workspace changes, log out and complete device login again.
 
 Run the included login example:
 
@@ -103,7 +119,7 @@ npm run example:login
 
 ```ts
 import { generateText, streamText } from 'ai';
-import { createOpenAIOAuthProvider } from 'openai-outh-ai-provider/ai-sdk';
+import { createOpenAIOAuthProvider } from 'openai-oauth-ai-provider/ai-sdk';
 
 const openaiOAuth = createOpenAIOAuthProvider();
 const model = openaiOAuth('gpt-5.4');
@@ -187,13 +203,17 @@ const uploaded = await openaiOAuth.skills().uploadSkill({
 });
 ```
 
+Only disable MCP approval for a server you fully trust. Remote MCP tools can
+receive conversation or tool data and can perform actions outside this
+library's control.
+
 ## TanStack AI
 
 ### Streaming chat
 
 ```ts
 import { chat } from '@tanstack/ai';
-import { openaiOAuthText } from 'openai-outh-ai-provider/tanstack';
+import { openaiOAuthText } from 'openai-oauth-ai-provider/tanstack';
 
 const adapter = openaiOAuthText('gpt-5.4');
 
@@ -229,7 +249,7 @@ outputs. It injects rotating OAuth credentials and enforces Codex defaults:
 ```ts
 import { chat, toolDefinition } from '@tanstack/ai';
 import { z } from 'zod';
-import { openaiOAuthText } from 'openai-outh-ai-provider/tanstack';
+import { openaiOAuthText } from 'openai-oauth-ai-provider/tanstack';
 
 const add = toolDefinition({
   name: 'add',
@@ -274,7 +294,7 @@ import {
   OpenAIOAuth,
   createOpenAIOAuthProvider,
   openaiOAuthText,
-} from 'openai-outh-ai-provider';
+} from 'openai-oauth-ai-provider';
 
 const auth = new OpenAIOAuth();
 
@@ -296,9 +316,31 @@ The implementation follows:
 ## Security notes
 
 - Treat the token file like a password. The file store requests user-only
-  permissions where supported by the operating system.
+  permissions where supported by the operating system. Windows users must also
+  rely on the ACLs protecting their profile directory.
 - OAuth JWTs are decoded only for routing and expiry claims. Decoding is not
   signature verification and is not used to authorize arbitrary issuers.
 - Refresh tokens are never included in model requests.
 - Caller-supplied authorization, ChatGPT account, and FedRAMP routing headers
   are overwritten from the active authenticated session.
+- Authenticated requests are restricted to their configured HTTPS origin and
+  reject redirects to avoid forwarding credentials to another service.
+
+Report suspected vulnerabilities privately as described in
+[`SECURITY.md`](SECURITY.md). Never include a live token or token file in an
+issue, log, or security report.
+
+## Releases and compatibility
+
+This project follows Semantic Versioning for its public TypeScript API. The
+private backend can still change without notice; compatibility fixes that
+restore intended behavior may be released as patches. Releases are built from
+protected `v<version>` tags, tested as packed consumer artifacts, and published
+with npm provenance. See [`CHANGELOG.md`](CHANGELOG.md) for user-visible
+changes.
+
+## Contributing and support
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request and
+[`SUPPORT.md`](SUPPORT.md) for the supported scope. Participation is governed
+by [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).

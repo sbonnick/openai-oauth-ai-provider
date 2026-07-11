@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a focused public API or adapter capability
+title: '[Feature]: '
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the consumer need rather than only a proposed API.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: Integration contract
+      options:
+        - label: I understand that backend- or plan-controlled capability is not guaranteed by this library.
+          required: true

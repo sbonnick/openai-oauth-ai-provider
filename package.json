@@ -1,11 +1,12 @@
 {
-  "name": "openai-outh-ai-provider",
+  "name": "openai-oauth-ai-provider",
   "version": "0.1.0",
   "description": "OpenAI OAuth provider for AI SDK 7 and TanStack AI backed by the Codex Responses endpoint",
   "type": "module",
   "sideEffects": false,
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
@@ -33,32 +34,62 @@
   "engines": {
     "node": ">=22.18"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sbonnick/openai-oauth-ai-provider.git"
+  },
+  "homepage": "https://github.com/sbonnick/openai-oauth-ai-provider#readme",
+  "bugs": {
+    "url": "https://github.com/sbonnick/openai-oauth-ai-provider/issues"
+  },
+  "author": "Stewart Bonnick",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
-    "example:generate": "tsc -p tsconfig.examples.json && node .examples-dist/examples/generate.js",
-    "example:login": "tsc -p tsconfig.examples.json && node .examples-dist/examples/device-login.js",
-    "example:mcp": "tsc -p tsconfig.examples.json && node .examples-dist/examples/remote-mcp.js",
-    "example:tanstack": "tsc -p tsconfig.examples.json && node .examples-dist/examples/tanstack.js",
-    "example:tools": "tsc -p tsconfig.examples.json && node .examples-dist/examples/tools.js",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run pack:check",
+    "example:generate": "tsc -p tsconfig.examples.json && node --env-file-if-exists=.env .examples-dist/examples/generate.js",
+    "example:login": "tsc -p tsconfig.examples.json && node --env-file-if-exists=.env .examples-dist/examples/device-login.js",
+    "example:mcp": "tsc -p tsconfig.examples.json && node --env-file-if-exists=.env .examples-dist/examples/remote-mcp.js",
+    "example:tanstack": "tsc -p tsconfig.examples.json && node --env-file-if-exists=.env .examples-dist/examples/tanstack.js",
+    "example:tools": "tsc -p tsconfig.examples.json && node --env-file-if-exists=.env .examples-dist/examples/tools.js",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
+    "pack:check": "node scripts/validate-package.mjs",
+    "prepack": "npm run build",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/auth.test.js .test-dist/tests/provider.test.js .test-dist/tests/tanstack.test.js",
     "typecheck": "tsc -p tsconfig.json"
   },
-  "dependencies": {
-    "@ai-sdk/openai": "^4.0.11",
-    "@tanstack/ai-openai": "^0.16.0"
-  },
   "peerDependencies": {
-    "@ai-sdk/provider": "^4.0.3",
-    "@tanstack/ai": "^0.40.0"
+    "@ai-sdk/openai": "4.0.11",
+    "@ai-sdk/provider": "4.0.3",
+    "@tanstack/ai": "0.40.0",
+    "@tanstack/ai-openai": "0.16.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/openai": {
+      "optional": true
+    },
+    "@ai-sdk/provider": {
+      "optional": true
+    },
+    "@tanstack/ai": {
+      "optional": true
+    },
+    "@tanstack/ai-openai": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@ai-sdk/openai": "4.0.11",
     "@ai-sdk/provider": "^4.0.3",
     "@biomejs/biome": "^2.5.3",
     "@tanstack/ai": "^0.40.0",
+    "@tanstack/ai-openai": "0.16.0",
     "@types/node": "^24.0.0",
     "ai": "^7.0.20",
     "typescript": "^5.9.0"

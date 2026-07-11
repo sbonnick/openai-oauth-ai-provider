@@ -5,6 +5,7 @@ export type OpenAIOAuthErrorCode =
   | 'device_authorization_timeout'
   | 'invalid_token'
   | 'oauth_exchange_failed'
+  | 'request_timeout'
   | 'refresh_failed'
   | 'workspace_mismatch';
 

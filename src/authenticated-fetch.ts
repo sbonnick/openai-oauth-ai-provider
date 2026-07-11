@@ -1,9 +1,26 @@
-import { DEFAULT_ORIGINATOR } from './constants.js';
+import { CHATGPT_CODEX_BASE_URL, DEFAULT_ORIGINATOR } from './constants.js';
 import type { OpenAIOAuth } from './auth.js';
 
 export interface AuthenticatedFetchOptions {
+  readonly allowedOrigins?: readonly string[];
   readonly fetch?: typeof globalThis.fetch;
   readonly originator?: string;
+}
+
+function normalizeAllowedOrigins(origins: readonly string[]): Set<string> {
+  return new Set(
+    origins.map((origin) => {
+      const url = new URL(origin);
+      if (url.protocol !== 'https:') {
+        throw new TypeError('Authenticated OpenAI requests require HTTPS.');
+      }
+      return url.origin;
+    }),
+  );
+}
+
+function requestUrl(input: RequestInfo | URL): URL {
+  return new URL(input instanceof Request ? input.url : String(input));
 }
 
 export function createAuthenticatedFetch(
@@ -12,12 +29,27 @@ export function createAuthenticatedFetch(
 ): typeof globalThis.fetch {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   const originator = options.originator ?? DEFAULT_ORIGINATOR;
+  const allowedOrigins = normalizeAllowedOrigins(
+    options.allowedOrigins ?? [CHATGPT_CODEX_BASE_URL],
+  );
 
   return async (input, init) => {
-    const execute = async () => {
+    const url = requestUrl(input);
+    if (!allowedOrigins.has(url.origin)) {
+      throw new TypeError(
+        `Refusing to send OpenAI OAuth credentials to ${url.origin}.`,
+      );
+    }
+    if (url.protocol !== 'https:') {
+      throw new TypeError('Authenticated OpenAI requests require HTTPS.');
+    }
+
+    const retryInput = input instanceof Request ? input.clone() : input;
+    const execute = async (attemptInput: RequestInfo | URL) => {
       const tokens = await auth.getTokens();
       const headers = new Headers(
-        init?.headers ?? (input instanceof Request ? input.headers : undefined),
+        init?.headers ??
+          (attemptInput instanceof Request ? attemptInput.headers : undefined),
       );
       headers.set('authorization', `Bearer ${tokens.accessToken}`);
       headers.set('originator', originator);
@@ -31,14 +63,27 @@ export function createAuthenticatedFetch(
       } else {
         headers.delete('x-openai-fedramp');
       }
-      return fetchImplementation(input, { ...init, headers });
+      const response = await fetchImplementation(attemptInput, {
+        ...init,
+        headers,
+        redirect: 'error',
+      });
+      return { accessToken: tokens.accessToken, response };
     };
 
-    let response = await execute();
+    let { accessToken, response } = await execute(input);
     if (response.status === 401) {
       await response.body?.cancel();
-      await auth.refresh();
-      response = await execute();
+      if (init?.body instanceof ReadableStream) {
+        throw new TypeError(
+          'Cannot retry an authenticated request with a streaming body.',
+        );
+      }
+      const current = await auth.getTokens();
+      if (current.accessToken === accessToken) {
+        await auth.refresh();
+      }
+      ({ accessToken, response } = await execute(retryInput));
     }
     return response;
   };

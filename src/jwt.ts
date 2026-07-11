@@ -4,7 +4,7 @@ export interface OpenAIOAuthJwtClaims {
   readonly accountId?: string;
   readonly email?: string;
   readonly expiresAt?: number;
-  readonly isFedRamp: boolean;
+  readonly isFedRamp?: boolean;
   readonly planType?: string;
   readonly userId?: string;
 }
@@ -32,6 +32,9 @@ function optionalString(value: unknown): string | undefined {
 }
 
 export function decodeJwtPayload(token: string): JwtPayload {
+  if (token.length > 1024 * 1024) {
+    throw new OpenAIOAuthError('invalid_token', 'JWT exceeds the size limit.');
+  }
   const parts = token.split('.');
   const payload = parts[1];
   if (parts.length !== 3 || payload === undefined || payload.length === 0) {
@@ -45,11 +48,10 @@ export function decodeJwtPayload(token: string): JwtPayload {
       throw new TypeError('JWT payload is not an object.');
     }
     return value as JwtPayload;
-  } catch (cause) {
+  } catch {
     throw new OpenAIOAuthError(
       'invalid_token',
       'Could not decode JWT payload.',
-      { cause },
     );
   }
 }
@@ -74,10 +76,14 @@ export function parseOpenAIOAuthJwtClaims(token: string): OpenAIOAuthJwtClaims {
   return {
     ...(accountId === undefined ? {} : { accountId }),
     ...(email === undefined ? {} : { email }),
-    ...(typeof payload.exp === 'number'
+    ...(typeof payload.exp === 'number' &&
+    Number.isFinite(payload.exp) &&
+    Number.isSafeInteger(payload.exp)
       ? { expiresAt: payload.exp * 1000 }
       : {}),
-    isFedRamp: auth?.chatgpt_account_is_fedramp === true,
+    ...(typeof auth?.chatgpt_account_is_fedramp === 'boolean'
+      ? { isFedRamp: auth.chatgpt_account_is_fedramp }
+      : {}),
     ...(planType === undefined ? {} : { planType }),
     ...(userId === undefined ? {} : { userId }),
   };
@@ -86,7 +92,11 @@ export function parseOpenAIOAuthJwtClaims(token: string): OpenAIOAuthJwtClaims {
 export function tryGetJwtExpiration(token: string): number | undefined {
   try {
     const payload = decodeJwtPayload(token);
-    return typeof payload.exp === 'number' ? payload.exp * 1000 : undefined;
+    return typeof payload.exp === 'number' &&
+      Number.isFinite(payload.exp) &&
+      Number.isSafeInteger(payload.exp)
+      ? payload.exp * 1000
+      : undefined;
   } catch {
     return undefined;
   }

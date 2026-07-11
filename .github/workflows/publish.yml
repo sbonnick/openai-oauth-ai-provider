@@ -1,0 +1,89 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.18.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev
+
+      - name: Verify release version
+        run: |
+          package_version="$(node --input-type=module -e "import manifest from './package.json' with { type: 'json' }; process.stdout.write(manifest.version)")"
+          lock_version="$(node --input-type=module -e "import lock from './package-lock.json' with { type: 'json' }; process.stdout.write(lock.version)")"
+          test "$GITHUB_REF_NAME" = "v$package_version"
+          test "$lock_version" = "$package_version"
+
+      - name: Check and build
+        run: npm run check
+
+      - name: Create release artifact
+        run: |
+          mkdir release
+          npm pack --pack-destination release
+
+      - name: Checksum release artifact
+        working-directory: release
+        run: sha256sum ./*.tgz > SHA256SUMS
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: npm-package
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: npm-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: npm-package
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.18.0
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify release artifact
+        run: sha256sum --check SHA256SUMS
+
+      - name: Install trusted-publishing npm client
+        run: npm install --global npm@11.5.1
+
+      - name: Publish to npm
+        run: npm publish ./*.tgz --access public --provenance

@@ -3,7 +3,7 @@ import { createOpenAIOAuthProvider } from '../src/ai-sdk.js';
 
 const codex = createOpenAIOAuthProvider();
 if (!(await codex.auth.isAuthenticated())) {
-  throw new Error('Run `node examples/device-login.ts` first.');
+  throw new Error('Run `npm run example:login` first.');
 }
 
 const result = await generateText({

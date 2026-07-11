@@ -8,3 +8,5 @@ coverage/
 .env.*
 !.env.example
 npm-debug.log*
+/.openai-oauth-auth.json
+/.openai-oauth-auth.json.*.tmp

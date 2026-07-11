@@ -49,11 +49,15 @@ interface RefreshTokenResponse {
   readonly refresh_token?: unknown;
 }
 
+const MAX_AUTH_RESPONSE_BYTES = 1024 * 1024;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
 export interface OpenAIOAuthOptions {
   readonly clientId?: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly issuer?: string;
   readonly now?: () => number;
+  readonly requestTimeoutMs?: number;
   readonly tokenStore?: TokenStore;
 }
 
@@ -84,34 +88,84 @@ function parseInterval(value: unknown): number {
   return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 5_000;
 }
 
-async function responseDetails(response: Response): Promise<string> {
-  const body = (await response.text()).trim();
-  if (body.length === 0) {
-    return response.statusText || `HTTP ${response.status}`;
+function responseDetails(response: Response): string {
+  return `HTTP ${response.status}`;
+}
+
+async function responseJson<T>(
+  response: Response,
+  errorCode: OpenAIOAuthError['code'],
+  timeoutMs: number,
+): Promise<T> {
+  const contentLength = Number(response.headers.get('content-length'));
+  if (
+    Number.isFinite(contentLength) &&
+    contentLength > MAX_AUTH_RESPONSE_BYTES
+  ) {
+    throw new OpenAIOAuthError(
+      errorCode,
+      'OpenAI authentication response is too large.',
+    );
   }
-  try {
-    const value: unknown = JSON.parse(body);
-    if (typeof value === 'object' && value !== null) {
-      const record = value as Record<string, unknown>;
-      const error = record.error;
-      if (typeof error === 'object' && error !== null) {
-        const message = (error as Record<string, unknown>).message;
-        const code = (error as Record<string, unknown>).code;
-        if (typeof message === 'string') {
-          return typeof code === 'string' ? `${code}: ${message}` : message;
-        }
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    throw new OpenAIOAuthError(
+      errorCode,
+      'OpenAI authentication response is empty.',
+    );
+  }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const read = async () => {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
       }
-      if (typeof error === 'string') {
-        return error;
+      size += value.byteLength;
+      if (size > MAX_AUTH_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new OpenAIOAuthError(
+          errorCode,
+          'OpenAI authentication response is too large.',
+        );
       }
-      if (typeof record.message === 'string') {
-        return record.message;
-      }
+      chunks.push(value);
     }
-  } catch {
-    // Fall through to the bounded plain-text response.
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    try {
+      return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    } catch {
+      throw new OpenAIOAuthError(
+        errorCode,
+        'OpenAI authentication response is not valid JSON.',
+      );
+    }
+  };
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+          void reader.cancel();
+          reject(
+            new OpenAIOAuthError(
+              'request_timeout',
+              'OpenAI authentication response timed out.',
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
   }
-  return body.slice(0, 500);
 }
 
 function abortError(): OpenAIOAuthError {
@@ -141,64 +195,87 @@ export class OpenAIOAuth {
   readonly tokenStore: TokenStore;
   private readonly fetchImplementation: typeof globalThis.fetch;
   private readonly now: () => number;
+  private readonly pendingAuthorizations = new WeakMap<
+    DeviceAuthorization,
+    PendingDeviceAuthorization
+  >();
+  private readonly requestTimeoutMs: number;
   private cachedTokens: OpenAIOAuthTokens | undefined;
   private loaded = false;
+  private mutationQueue: Promise<void> = Promise.resolve();
   private refreshPromise: Promise<OpenAIOAuthTokens> | undefined;
+  private stateGeneration = 0;
 
   constructor(options: OpenAIOAuthOptions = {}) {
     this.clientId = options.clientId ?? CODEX_OAUTH_CLIENT_ID;
-    this.issuer = (options.issuer ?? OPENAI_AUTH_ISSUER).replace(/\/$/, '');
+    const issuer = new URL(options.issuer ?? OPENAI_AUTH_ISSUER);
+    if (issuer.protocol !== 'https:') {
+      throw new TypeError('The OpenAI OAuth issuer must use HTTPS.');
+    }
+    this.issuer = issuer.href.replace(/\/$/, '');
     this.tokenStore = options.tokenStore ?? new FileTokenStore();
     this.fetchImplementation = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? Date.now;
+    this.requestTimeoutMs =
+      options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    if (!Number.isFinite(this.requestTimeoutMs) || this.requestTimeoutMs <= 0) {
+      throw new TypeError('requestTimeoutMs must be a positive finite number.');
+    }
   }
 
-  async startDeviceAuthorization(): Promise<DeviceAuthorization> {
-    return this.requestDeviceAuthorization();
+  async startDeviceAuthorization(
+    options: { signal?: AbortSignal } = {},
+  ): Promise<DeviceAuthorization> {
+    return this.requestDeviceAuthorization(options.signal);
   }
 
   async completeDeviceAuthorization(
     authorization: DeviceAuthorization,
     options: { signal?: AbortSignal } = {},
   ): Promise<OpenAIOAuthTokens> {
-    const pending = authorization as PendingDeviceAuthorization;
-    if (!pending.deviceAuthId || !pending.intervalMs) {
+    const pending = this.pendingAuthorizations.get(authorization);
+    if (pending === undefined) {
       throw new TypeError(
         'The authorization must be returned by startDeviceAuthorization() on this client.',
       );
     }
+    this.pendingAuthorizations.delete(authorization);
 
     const code = await this.pollForAuthorizationCode(pending, options.signal);
-    const response = await this.fetchImplementation(
-      `${this.issuer}/oauth/token`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code',
-          code: requiredString(code.authorization_code, 'authorization_code'),
-          redirect_uri: `${this.issuer}/deviceauth/callback`,
-          client_id: this.clientId,
-          code_verifier: requiredString(code.code_verifier, 'code_verifier'),
-        }),
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      },
-    );
+    const response = await this.fetchWithTimeout(`${this.issuer}/oauth/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: requiredString(code.authorization_code, 'authorization_code'),
+        redirect_uri: `${this.issuer}/deviceauth/callback`,
+        client_id: this.clientId,
+        code_verifier: requiredString(code.code_verifier, 'code_verifier'),
+      }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
     if (!response.ok) {
+      await response.body?.cancel();
       throw new OpenAIOAuthError(
         'oauth_exchange_failed',
-        `OpenAI token exchange failed: ${await responseDetails(response)}`,
+        `OpenAI token exchange failed: ${responseDetails(response)}`,
         { status: response.status },
       );
     }
-    const value = (await response.json()) as OAuthTokenResponse;
+    const value = await responseJson<OAuthTokenResponse>(
+      response,
+      'oauth_exchange_failed',
+      this.requestTimeoutMs,
+    );
     return this.persistOAuthResponse(value);
   }
 
   async loginWithDeviceCode(
     options: DeviceLoginOptions = {},
   ): Promise<OpenAIOAuthTokens> {
-    const authorization = await this.startDeviceAuthorization();
+    const authorization = await this.startDeviceAuthorization({
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
     await options.onVerification?.(authorization);
     return this.completeDeviceAuthorization(authorization, {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
@@ -243,35 +320,55 @@ export class OpenAIOAuth {
   }
 
   async logout(): Promise<void> {
-    this.cachedTokens = undefined;
-    this.loaded = true;
-    await this.tokenStore.clear();
+    this.stateGeneration += 1;
+    const clear = () =>
+      this.queueMutation(async () => {
+        await this.tokenStore.clear();
+        this.cachedTokens = undefined;
+        this.loaded = true;
+      });
+    await (this.tokenStore.withLock?.(clear) ?? clear());
   }
 
-  private async requestDeviceAuthorization(): Promise<PendingDeviceAuthorization> {
-    const response = await this.fetchImplementation(
+  private async requestDeviceAuthorization(
+    signal?: AbortSignal,
+  ): Promise<DeviceAuthorization> {
+    const response = await this.fetchWithTimeout(
       `${this.issuer}/api/accounts/deviceauth/usercode`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ client_id: this.clientId }),
       },
+      signal,
     );
     if (!response.ok) {
+      await response.body?.cancel();
       throw new OpenAIOAuthError(
         'device_authorization_failed',
-        `OpenAI device authorization failed: ${await responseDetails(response)}`,
+        `OpenAI device authorization failed: ${responseDetails(response)}`,
         { status: response.status },
       );
     }
-    const value = (await response.json()) as DeviceCodeResponse;
-    return {
+    const value = await responseJson<DeviceCodeResponse>(
+      response,
+      'device_authorization_failed',
+      this.requestTimeoutMs,
+    );
+    const pending: PendingDeviceAuthorization = {
       deviceAuthId: requiredString(value.device_auth_id, 'device_auth_id'),
       expiresAt: this.now() + DEVICE_AUTH_TIMEOUT_MS,
       intervalMs: parseInterval(value.interval),
       userCode: requiredString(value.user_code ?? value.usercode, 'user_code'),
       verificationUrl: `${this.issuer}/codex/device`,
     };
+    const authorization: DeviceAuthorization = {
+      expiresAt: pending.expiresAt,
+      userCode: pending.userCode,
+      verificationUrl: pending.verificationUrl,
+    };
+    this.pendingAuthorizations.set(authorization, pending);
+    return authorization;
   }
 
   private async pollForAuthorizationCode(
@@ -283,25 +380,35 @@ export class OpenAIOAuth {
       if (signal?.aborted) {
         throw abortError();
       }
-      const response = await this.fetchImplementation(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          device_auth_id: authorization.deviceAuthId,
-          user_code: authorization.userCode,
-        }),
-        ...(signal === undefined ? {} : { signal }),
-      });
+      const response = await this.fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            device_auth_id: authorization.deviceAuthId,
+            user_code: authorization.userCode,
+          }),
+          ...(signal === undefined ? {} : { signal }),
+        },
+        signal,
+      );
       if (response.ok) {
-        return (await response.json()) as DeviceTokenResponse;
+        return responseJson<DeviceTokenResponse>(
+          response,
+          'device_authorization_failed',
+          this.requestTimeoutMs,
+        );
       }
       if (response.status !== 403 && response.status !== 404) {
+        await response.body?.cancel();
         throw new OpenAIOAuthError(
           'device_authorization_failed',
-          `OpenAI device authorization polling failed: ${await responseDetails(response)}`,
+          `OpenAI device authorization polling failed: ${responseDetails(response)}`,
           { status: response.status },
         );
       }
+      await response.body?.cancel();
       await sleep(
         Math.min(
           authorization.intervalMs,
@@ -327,12 +434,17 @@ export class OpenAIOAuth {
         ? {}
         : { accountId: claims.accountId }),
       idToken,
-      isFedRamp: claims.isFedRamp,
+      ...(claims.isFedRamp === undefined
+        ? {}
+        : { isFedRamp: claims.isFedRamp }),
       ...(claims.planType === undefined ? {} : { planType: claims.planType }),
       refreshToken: requiredString(response.refresh_token, 'refresh_token'),
       updatedAt: this.now(),
     };
-    await this.saveTokens(tokens);
+    this.stateGeneration += 1;
+    const generation = this.stateGeneration;
+    const commit = () => this.commitTokens(tokens, generation);
+    await (this.tokenStore.withLock?.(commit) ?? commit());
     return tokens;
   }
 
@@ -345,6 +457,18 @@ export class OpenAIOAuth {
   }
 
   private async performRefresh(): Promise<OpenAIOAuthTokens> {
+    if (this.tokenStore.withLock !== undefined) {
+      return this.tokenStore.withLock(async () => {
+        this.cachedTokens = await this.tokenStore.load();
+        this.loaded = true;
+        return this.performRefreshUnlocked();
+      });
+    }
+    return this.performRefreshUnlocked();
+  }
+
+  private async performRefreshUnlocked(): Promise<OpenAIOAuthTokens> {
+    const generation = this.stateGeneration;
     const current = await this.loadTokens();
     if (current === undefined) {
       throw new OpenAIOAuthError(
@@ -352,28 +476,36 @@ export class OpenAIOAuth {
         'No ChatGPT authentication is available to refresh.',
       );
     }
-    const response = await this.fetchImplementation(
-      `${this.issuer}/oauth/token`,
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          client_id: this.clientId,
-          grant_type: 'refresh_token',
-          refresh_token: current.refreshToken,
-        }),
-      },
-    );
+    const response = await this.fetchWithTimeout(`${this.issuer}/oauth/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        client_id: this.clientId,
+        grant_type: 'refresh_token',
+        refresh_token: current.refreshToken,
+      }),
+    });
     if (!response.ok) {
+      await response.body?.cancel();
       throw new OpenAIOAuthError(
         'refresh_failed',
-        `OpenAI token refresh failed: ${await responseDetails(response)}`,
+        `OpenAI token refresh failed: ${responseDetails(response)}`,
         { status: response.status },
       );
     }
-    const value = (await response.json()) as RefreshTokenResponse;
+    const value = await responseJson<RefreshTokenResponse>(
+      response,
+      'refresh_failed',
+      this.requestTimeoutMs,
+    );
+    const accessToken = requiredRefreshString(
+      value.access_token,
+      'access_token',
+    );
     const idToken =
-      typeof value.id_token === 'string' ? value.id_token : current.idToken;
+      value.id_token === undefined
+        ? current.idToken
+        : requiredRefreshString(value.id_token, 'id_token');
     const claims = parseOpenAIOAuthJwtClaims(idToken);
     if (
       current.accountId !== undefined &&
@@ -386,25 +518,24 @@ export class OpenAIOAuth {
       );
     }
     const refreshed: OpenAIOAuthTokens = {
-      accessToken:
-        typeof value.access_token === 'string'
-          ? value.access_token
-          : current.accessToken,
+      accessToken,
       ...((claims.accountId ?? current.accountId) === undefined
         ? {}
         : { accountId: claims.accountId ?? current.accountId }),
       idToken,
-      isFedRamp: claims.isFedRamp,
+      ...((claims.isFedRamp ?? current.isFedRamp) === undefined
+        ? {}
+        : { isFedRamp: claims.isFedRamp ?? current.isFedRamp }),
       ...((claims.planType ?? current.planType) === undefined
         ? {}
         : { planType: claims.planType ?? current.planType }),
       refreshToken:
-        typeof value.refresh_token === 'string'
-          ? value.refresh_token
-          : current.refreshToken,
+        value.refresh_token === undefined
+          ? current.refreshToken
+          : requiredRefreshString(value.refresh_token, 'refresh_token'),
       updatedAt: this.now(),
     };
-    await this.saveTokens(refreshed);
+    await this.commitTokens(refreshed, generation);
     return refreshed;
   }
 
@@ -416,9 +547,73 @@ export class OpenAIOAuth {
     return this.cachedTokens;
   }
 
-  private async saveTokens(tokens: OpenAIOAuthTokens): Promise<void> {
-    await this.tokenStore.save(tokens);
-    this.cachedTokens = tokens;
-    this.loaded = true;
+  private async commitTokens(
+    tokens: OpenAIOAuthTokens,
+    generation: number,
+  ): Promise<void> {
+    await this.queueMutation(async () => {
+      if (generation !== this.stateGeneration) {
+        throw new OpenAIOAuthError(
+          'auth_required',
+          'Authentication changed while credentials were refreshing.',
+        );
+      }
+      await this.tokenStore.save(tokens);
+      this.cachedTokens = tokens;
+      this.loaded = true;
+    });
   }
+
+  private async queueMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.mutationQueue.then(operation, operation);
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async fetchWithTimeout(
+    input: RequestInfo | URL,
+    init: RequestInit,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    if (signal?.aborted) {
+      throw abortError();
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const onAbort = () => controller.abort();
+    signal?.addEventListener('abort', onAbort, { once: true });
+    try {
+      return await this.fetchImplementation(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (cause) {
+      if (signal?.aborted) {
+        throw abortError();
+      }
+      if (controller.signal.aborted) {
+        throw new OpenAIOAuthError(
+          'request_timeout',
+          'OpenAI authentication request timed out.',
+        );
+      }
+      throw cause;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
+    }
+  }
+}
+
+function requiredRefreshString(value: unknown, name: string): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new OpenAIOAuthError(
+      'refresh_failed',
+      `OpenAI token refresh response is missing ${name}.`,
+    );
+  }
+  return value;
 }

@@ -126,13 +126,15 @@ export function createOpenAIOAuthProvider(
   options: OpenAIOAuthProviderOptions = {},
 ): OpenAIOAuthProvider {
   const auth = options.auth ?? new OpenAIOAuth(options.authOptions);
+  const baseURL = options.baseURL ?? CHATGPT_CODEX_BASE_URL;
   const authenticatedFetch = createAuthenticatedFetch(auth, {
+    allowedOrigins: [baseURL],
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     originator: options.originator ?? DEFAULT_ORIGINATOR,
   });
   const delegate = createOpenAI({
     apiKey: 'managed-by-openai-oauth',
-    baseURL: options.baseURL ?? CHATGPT_CODEX_BASE_URL,
+    baseURL,
     fetch: authenticatedFetch,
     ...(options.headers === undefined ? {} : { headers: options.headers }),
     name: 'openai-oauth',
