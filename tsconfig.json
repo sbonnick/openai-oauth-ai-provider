@@ -3,7 +3,7 @@
     "declaration": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": ["ES2024"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "noEmit": true,
@@ -14,7 +14,8 @@
     "noUnusedParameters": true,
     "skipLibCheck": true,
     "strict": true,
-    "target": "ES2023",
+    "target": "ES2024",
+    "types": ["node"],
     "verbatimModuleSyntax": true
   },
   "include": ["src/**/*.ts", "examples/**/*.ts", "tests/**/*.ts"]

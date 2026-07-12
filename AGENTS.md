@@ -24,7 +24,7 @@ The backend at `https://chatgpt.com/backend-api/codex` is not the public OpenAI 
 
 ## Runtime and tooling
 
-- Use Node.js 22.18 or newer and npm. The package is ESM (`"type": "module"`).
+- Use Node.js 24 or newer and npm. The package is ESM (`"type": "module"`).
 - Install exactly from the lockfile with `npm ci`.
 - Keep source imports compatible with `NodeNext`: relative TypeScript imports use the emitted `.js` suffix, for example `./auth.js`.
 - TypeScript is intentionally strict, including `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, unused checks, and declaration generation.

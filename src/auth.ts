@@ -574,7 +574,7 @@ export class OpenAIOAuth {
   }
 
   private async fetchWithTimeout(
-    input: RequestInfo | URL,
+    input: string | URL | Request,
     init: RequestInit,
     signal?: AbortSignal,
   ): Promise<Response> {

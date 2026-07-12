@@ -2,7 +2,7 @@
 
 ## Development
 
-Use Node.js 22.18 or newer and install the exact dependency graph:
+Use Node.js 24 or newer and install the exact dependency graph:
 
 ```sh
 npm ci

@@ -37,7 +37,7 @@ hosted capabilities.
 
 ## Requirements
 
-- Node.js 22.18 or newer
+- Node.js 24 or newer
 - an ESM application (`import`; CommonJS `require` is not supported)
 - a ChatGPT account with Codex access
 - AI SDK 7 or TanStack AI 0.40+

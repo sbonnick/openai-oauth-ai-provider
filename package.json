@@ -36,7 +36,7 @@
     "./package.json": "./package.json"
   },
   "engines": {
-    "node": ">=22.18"
+    "node": ">=24"
   },
   "repository": {
     "type": "git",
@@ -96,7 +96,7 @@
     "@tanstack/ai-openai": "0.16.0",
     "@types/node": "^24.0.0",
     "ai": "^7.0.20",
-    "typescript": "^5.9.0"
+    "typescript": "^7.0.0"
   },
   "keywords": [
     "ai-sdk",

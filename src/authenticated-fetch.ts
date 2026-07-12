@@ -19,7 +19,7 @@ function normalizeAllowedOrigins(origins: readonly string[]): Set<string> {
   );
 }
 
-function requestUrl(input: RequestInfo | URL): URL {
+function requestUrl(input: string | URL | Request): URL {
   return new URL(input instanceof Request ? input.url : String(input));
 }
 
@@ -45,7 +45,7 @@ export function createAuthenticatedFetch(
     }
 
     const retryInput = input instanceof Request ? input.clone() : input;
-    const execute = async (attemptInput: RequestInfo | URL) => {
+    const execute = async (attemptInput: string | URL | Request) => {
       const tokens = await auth.getTokens();
       const headers = new Headers(
         init?.headers ??
