@@ -94,7 +94,7 @@
     "@biomejs/biome": "^2.5.3",
     "@tanstack/ai": "^0.40.0",
     "@tanstack/ai-openai": "0.16.0",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.1.1",
     "ai": "^7.0.20",
     "typescript": "^7.0.0"
   },
