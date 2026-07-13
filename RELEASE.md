@@ -1,26 +1,61 @@
 # Release Process
 
-1. Confirm `main` is protected and all required CI checks pass.
-2. Update `CHANGELOG.md`, `package.json`, and `package-lock.json` to the same
-   SemVer version.
-3. Run `npm ci`, `npm run check`, and `npm run build` from a clean checkout.
-4. Review `npm pack --dry-run --json` and confirm no credentials or unexpected
-   files are present.
-5. Merge the release pull request after review.
-6. Create and push an immutable signed tag named `v<package-version>`.
-7. Approve the `npm-production` GitHub Environment deployment.
-8. Verify npm provenance, package contents, documented imports, and the GitHub
-   release notes after publication.
+Releases are created from `main`. Only repository administrators can create a
+`v*` tag. Pushing a valid release tag automatically runs the npm publish
+workflow with trusted publishing and provenance.
 
-Published versions cannot be replaced. For a bad release, deprecate the
-affected version on npm, publish a corrected patch, and document the incident.
+## Create a Release
 
-Repository administrators must require pull requests and CI on `main`, disable
-force pushes and deletion, protect `v*` tags, enable private vulnerability
-reporting and secret scanning, and require reviewers for the `npm-production`
-environment. Configure npm Trusted Publishing for this repository and
-`.github/workflows/publish.yml`; do not store a long-lived npm token.
+1. Create a release branch from the current `main`.
+2. Choose the next Semantic Versioning version and update both version files:
 
-Before the first release, rename the GitHub repository to
-`openai-oauth-ai-provider` so its canonical URL matches the npm package
-metadata and configure redirects from the former repository name.
+   ```sh
+   npm version patch --no-git-tag-version
+   ```
+
+   Replace `patch` with `minor` or `major` when appropriate. This updates
+   `package.json` and `package-lock.json` without creating a tag.
+3. Move the user-visible changes from `CHANGELOG.md`'s `Unreleased` section to
+   a new version heading, for example `## [0.1.1] - 2026-07-13`. Add a new,
+   empty `Unreleased` section above it.
+4. Review the release locally:
+
+   ```sh
+   npm ci
+   npm run check
+   npm run build
+   npm pack --dry-run --json
+   ```
+
+5. Open a pull request with the version and changelog changes. Get the required
+   approval and merge it after CI passes.
+6. Update local `main` after the merge:
+
+   ```sh
+   git switch main
+   git pull --ff-only
+   ```
+
+7. As a repository administrator, create and push the tag that exactly matches
+   the package version:
+
+   ```sh
+   git tag -a v0.1.1 -m v0.1.1
+   git push origin v0.1.1
+   ```
+
+8. Check the GitHub Actions **Publish** workflow. It verifies that the tag,
+   `package.json`, and `package-lock.json` versions match; runs the checks;
+   packs the artifact; and publishes it to npm. No manual npm command or
+   environment approval is needed.
+9. Confirm the published version and provenance on npm:
+
+   ```sh
+   npm view openai-oauth-ai-provider@0.1.1 version
+   ```
+
+## Correcting a Release
+
+Published npm versions and release tags are immutable. Do not move or reuse a
+tag. For a bad release, document the issue in the changelog and publish a
+corrected patch version. Deprecate the affected npm version when appropriate.
