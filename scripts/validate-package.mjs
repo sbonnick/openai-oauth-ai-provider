@@ -2,20 +2,36 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
+const npmCli =
+  process.env.npm_execpath ??
+  (process.platform === 'win32'
+    ? join(
+        dirname(process.execPath),
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      )
+    : undefined);
 const root = resolve(import.meta.dirname, '..');
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), 'openai-oauth-package-'),
 );
 
+function executeNpm(args, cwd) {
+  return npmCli === undefined
+    ? execute('npm', args, { cwd })
+    : execute(process.execPath, [npmCli, ...args], { cwd });
+}
+
 try {
-  const { stdout } = await execute(
-    'npm',
+  const { stdout } = await executeNpm(
     ['pack', '--json', '--pack-destination', temporaryDirectory],
-    { cwd: root },
+    root,
   );
   const [packed] = JSON.parse(stdout);
   assert(packed, 'npm pack did not produce a package.');
@@ -55,15 +71,14 @@ try {
     join(consumerDirectory, 'package.json'),
     JSON.stringify({ private: true, type: 'module' }),
   );
-  await execute(
-    'npm',
+  await executeNpm(
     [
       'install',
       '--ignore-scripts',
       '--no-package-lock',
       join(temporaryDirectory, packed.filename),
     ],
-    { cwd: consumerDirectory },
+    consumerDirectory,
   );
   const manifest = JSON.parse(
     await readFile(join(root, 'package.json'), 'utf8'),
@@ -76,8 +91,7 @@ try {
   );
   await execute('node', ['core.mjs'], { cwd: consumerDirectory });
 
-  await execute(
-    'npm',
+  await executeNpm(
     [
       'install',
       '--ignore-scripts',
@@ -86,7 +100,7 @@ try {
         ([name, version]) => `${name}@${version}`,
       ),
     ],
-    { cwd: consumerDirectory },
+    consumerDirectory,
   );
   await writeFile(
     join(consumerDirectory, 'all.mjs'),

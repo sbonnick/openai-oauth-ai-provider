@@ -298,15 +298,19 @@ describe('OpenAIOAuth', () => {
     const storedTokens = tokens();
     try {
       await store.save(storedTokens);
-      assert.equal((await lstat(path)).mode & 0o777, 0o600);
+      if (process.platform !== 'win32') {
+        assert.equal((await lstat(path)).mode & 0o777, 0o600);
+      }
       assert.deepEqual(await store.load(), storedTokens);
 
-      await chmod(path, 0o644);
-      await assert.rejects(store.load(), /permissions must be 0600/);
-      await rm(path);
-      await symlink(join(directory, 'missing'), path);
-      await assert.rejects(store.load(), /Unsafe OpenAI OAuth token file/);
-      assert.equal(await readFile(path).catch(() => undefined), undefined);
+      if (process.platform !== 'win32') {
+        await chmod(path, 0o644);
+        await assert.rejects(store.load(), /permissions must be 0600/);
+        await rm(path);
+        await symlink(join(directory, 'missing'), path);
+        await assert.rejects(store.load(), /Unsafe OpenAI OAuth token file/);
+        assert.equal(await readFile(path).catch(() => undefined), undefined);
+      }
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
