@@ -1,6 +1,6 @@
 {
   "name": "openai-oauth-ai-provider",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenAI OAuth provider for AI SDK 7 and TanStack AI backed by the Codex Responses endpoint",
   "type": "module",
   "sideEffects": false,
