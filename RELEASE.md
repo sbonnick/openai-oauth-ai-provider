@@ -15,10 +15,7 @@ workflow with trusted publishing and provenance.
 
    Replace `patch` with `minor` or `major` when appropriate. This updates
    `package.json` and `package-lock.json` without creating a tag.
-3. Move the user-visible changes from `CHANGELOG.md`'s `Unreleased` section to
-   a new version heading, for example `## [0.1.1] - 2026-07-13`. Add a new,
-   empty `Unreleased` section above it.
-4. Review the release locally:
+3. Review the release locally:
 
    ```sh
    npm ci
@@ -27,16 +24,16 @@ workflow with trusted publishing and provenance.
    npm pack --dry-run --json
    ```
 
-5. Open a pull request with the version and changelog changes. Get the required
-   approval and merge it after CI passes.
-6. Update local `main` after the merge:
+4. Open a pull request with the version changes. Get the required approval and
+   merge it after CI passes.
+5. Update local `main` after the merge:
 
    ```sh
    git switch main
    git pull --ff-only
    ```
 
-7. As a repository administrator, create and push the tag that exactly matches
+6. As a repository administrator, create and push the tag that exactly matches
    the package version:
 
    ```sh
@@ -44,11 +41,11 @@ workflow with trusted publishing and provenance.
    git push origin v0.1.1
    ```
 
-8. Check the GitHub Actions **Publish** workflow. It verifies that the tag,
+7. Check the GitHub Actions **Publish** workflow. It verifies that the tag,
    `package.json`, and `package-lock.json` versions match; runs the checks;
    packs the artifact; and publishes it to npm. No manual npm command or
    environment approval is needed.
-9. Confirm the published version and provenance on npm:
+8. Confirm the published version and provenance on npm:
 
    ```sh
    npm view openai-oauth-ai-provider@0.1.1 version
@@ -57,5 +54,5 @@ workflow with trusted publishing and provenance.
 ## Correcting a Release
 
 Published npm versions and release tags are immutable. Do not move or reuse a
-tag. For a bad release, document the issue in the changelog and publish a
-corrected patch version. Deprecate the affected npm version when appropriate.
+tag. For a bad release, publish a corrected patch version. Deprecate the
+affected npm version when appropriate.

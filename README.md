@@ -365,8 +365,7 @@ This project follows Semantic Versioning for its public TypeScript API. The
 private backend can still change without notice; compatibility fixes that
 restore intended behavior may be released as patches. Releases are built from
 protected `v<version>` tags, tested as packed consumer artifacts, and published
-with npm provenance. See [`CHANGELOG.md`](CHANGELOG.md) for user-visible
-changes.
+with npm provenance.
 
 ## Contributing and support
 
