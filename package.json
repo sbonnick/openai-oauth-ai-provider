@@ -69,10 +69,10 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "peerDependencies": {
-    "@ai-sdk/openai": "4.0.28",
+    "@ai-sdk/openai": "4.0.30",
     "@ai-sdk/provider": "4.0.5",
     "@tanstack/ai": "0.42.0",
-    "@tanstack/ai-openai": "0.17.1"
+    "@tanstack/ai-openai": "0.18.0"
   },
   "peerDependenciesMeta": {
     "@ai-sdk/openai": {
@@ -89,11 +89,11 @@
     }
   },
   "devDependencies": {
-    "@ai-sdk/openai": "4.0.28",
+    "@ai-sdk/openai": "4.0.30",
     "@ai-sdk/provider": "^4.0.5",
     "@biomejs/biome": "^2.5.6",
-    "@tanstack/ai": "^0.42.0",
-    "@tanstack/ai-openai": "0.17.1",
+    "@tanstack/ai": "^0.43.0",
+    "@tanstack/ai-openai": "0.18.0",
     "@types/node": "^26.1.2",
     "ai": "^7.0.50",
     "typescript": "^7.0.0"
