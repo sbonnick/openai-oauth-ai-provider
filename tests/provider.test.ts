@@ -66,7 +66,7 @@ function createdEvent(response: ReturnType<typeof completedResponse>) {
   };
 }
 
-function textEvents(response: ReturnType<typeof completedResponse>) {
+function textEvents(response: ReturnType<typeof completedResponse>): unknown[] {
   const text = response.output[0]?.content[0]?.text ?? '';
   return [
     createdEvent(response),
@@ -245,6 +245,51 @@ describe('AI SDK 7 provider integration', () => {
     });
 
     assert.equal(await result.text, 'stream works');
+  });
+
+  it('preserves upstream text citations when collecting a streamed generation', async () => {
+    const response = completedResponse('A cited answer.');
+    const events = textEvents(response);
+    events.splice(events.length - 2, 0, {
+      type: 'response.output_text.annotation.added',
+      item_id: 'msg-test',
+      output_index: 0,
+      content_index: 0,
+      annotation_index: 0,
+      annotation: {
+        type: 'url_citation',
+        url: 'https://example.com/reference',
+        title: 'Reference',
+        start_index: 0,
+        end_index: 14,
+      },
+    });
+    const fetchMock: typeof fetch = async () => sseResponse(events);
+    const provider = createOpenAIOAuthProvider({
+      auth: new OpenAIOAuth({
+        tokenStore: new MemoryTokenStore(tokens()),
+      }),
+      fetch: fetchMock,
+    });
+
+    const result = await provider('gpt-5.4').doGenerate({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'Cite it.' }] }],
+    });
+    const text = result.content.find((part) => part.type === 'text');
+    assert.equal(text?.text, 'A cited answer.');
+    assert.equal(text?.citations?.length, 1);
+    assert.equal(text?.citations?.[0]?.source.sourceType, 'url');
+    assert.deepEqual(text?.citations?.[0], {
+      source: {
+        type: 'source',
+        sourceType: 'url',
+        id: text?.citations?.[0]?.source.id,
+        url: 'https://example.com/reference',
+        title: 'Reference',
+      },
+      startIndex: 0,
+      endIndex: 14,
+    });
   });
 
   it('exposes Provider V4 tools, files, and skills surfaces', () => {

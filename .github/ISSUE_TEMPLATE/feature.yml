@@ -1,6 +1,6 @@
 name: Feature request
 description: Propose a focused public API or adapter capability
-title: '[Feature]: '
+title: "[Feature]: "
 labels:
   - enhancement
 body:

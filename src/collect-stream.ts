@@ -1,5 +1,6 @@
 import {
   InvalidResponseDataError,
+  type LanguageModelV4Citation,
   type LanguageModelV4Content,
   type LanguageModelV4FinishReason,
   type LanguageModelV4GenerateResult,
@@ -11,6 +12,7 @@ import {
 } from '@ai-sdk/provider';
 
 interface BufferedContent {
+  citations?: LanguageModelV4Citation[];
   providerMetadata?: SharedV4ProviderMetadata;
   text: string;
   type: 'reasoning' | 'text';
@@ -95,6 +97,9 @@ export async function collectLanguageModelStream(
           const item = buffered.get(part.id);
           if (item !== undefined) {
             setProviderMetadata(item, part.providerMetadata);
+            if (part.type === 'text-end' && part.citations !== undefined) {
+              item.citations = part.citations;
+            }
           }
           break;
         }
@@ -115,6 +120,7 @@ export async function collectLanguageModelStream(
         case 'error':
           throw streamError(part.error);
         case 'raw':
+        case 'ping':
         case 'tool-input-start':
         case 'tool-input-delta':
         case 'tool-input-end':
