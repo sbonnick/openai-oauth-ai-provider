@@ -12,6 +12,7 @@ if (!(await adapter.auth.isAuthenticated())) {
 
 const stream = chat({
   adapter,
+  threadId: 'tanstack-example',
   messages: [
     {
       role: 'user',

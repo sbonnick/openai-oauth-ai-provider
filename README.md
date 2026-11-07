@@ -40,7 +40,7 @@ hosted capabilities.
 - Node.js 24 or newer
 - an ESM application (`import`; CommonJS `require` is not supported)
 - a ChatGPT account with Codex access
-- AI SDK 7 or TanStack AI 0.40+
+- AI SDK 7 or TanStack AI 1.2
 
 ## Installation
 
@@ -166,6 +166,8 @@ for await (const text of streamed.textStream) {
 The Codex Responses endpoint requires `stream: true`. The provider implements
 AI SDK `doGenerate` by collecting the streaming transport into a normal
 generation result, so both `generateText` and `streamText` work normally.
+Text citations emitted by the upstream provider are retained in collected
+generation content alongside their sources and offsets.
 
 Run the example:
 
@@ -246,6 +248,7 @@ const adapter = openaiOAuthText('gpt-5.4');
 
 const stream = chat({
   adapter,
+  threadId: 'hello-thread',
   messages: [{ role: 'user', content: 'Say hello in five words.' }],
 });
 
@@ -287,6 +290,7 @@ const add = toolDefinition({
 
 const stream = chat({
   adapter: openaiOAuthText('gpt-5.4'),
+  threadId: 'tools-thread',
   messages: [{ role: 'user', content: 'Use add to calculate 19 + 23.' }],
   tools: [add],
 });
@@ -300,6 +304,7 @@ import { z } from 'zod';
 
 const person = await chat({
   adapter: openaiOAuthText('gpt-5.4'),
+  threadId: 'person-thread',
   messages: [{ role: 'user', content: 'Ada Lovelace was 36.' }],
   outputSchema: z.object({
     name: z.string(),
@@ -360,6 +365,15 @@ Report suspected vulnerabilities privately as described in
 issue, log, or security report.
 
 ## Releases and compatibility
+
+The tested peer versions are `@ai-sdk/openai` 4.0.109,
+`@ai-sdk/provider` 4.0.36, `@tanstack/ai` 1.2.0, and
+`@tanstack/ai-openai` 1.1.1. Peer versions are pinned because these adapters
+wrap unstable upstream contracts. TanStack users upgrading from 0.x must
+provide a stable `threadId` to each `chat()` call; reuse it for the same
+conversation. Older TanStack 0.x versions are no longer supported by this
+dependency set. These versions are verified with mocked Responses streams,
+not a live private-backend compatibility guarantee.
 
 This project follows Semantic Versioning for its public TypeScript API. The
 private backend can still change without notice; compatibility fixes that

@@ -1,6 +1,6 @@
 name: Backend compatibility regression
 description: Report a change in the private Codex backend or an upstream adapter
-title: '[Compatibility]: '
+title: "[Compatibility]: "
 labels:
   - compatibility
 body:

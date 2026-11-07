@@ -132,16 +132,25 @@ describe('TanStack AI adapter integration', () => {
 
     let text = '';
     let finished = false;
+    const lifecycleThreads: string[] = [];
     for await (const chunk of chat({
       adapter,
+      threadId: 'test-stream-thread',
       messages: [{ role: 'user', content: 'Prove TanStack works.' }],
     })) {
       if (chunk.type === 'TEXT_MESSAGE_CONTENT') text += chunk.delta;
       if (chunk.type === 'RUN_FINISHED') finished = true;
+      if (chunk.type === 'RUN_STARTED' || chunk.type === 'RUN_FINISHED') {
+        lifecycleThreads.push(chunk.threadId);
+      }
     }
 
     assert.equal(text, 'TanStack AI works');
     assert.equal(finished, true);
+    assert.deepEqual(lifecycleThreads, [
+      'test-stream-thread',
+      'test-stream-thread',
+    ]);
     assert.equal(requestBody?.stream, true);
     assert.equal(requestBody?.store, false);
     assert.equal(requestBody?.parallel_tool_calls, true);
@@ -165,6 +174,7 @@ describe('TanStack AI adapter integration', () => {
 
     const result = await chat({
       adapter,
+      threadId: 'test-structured-thread',
       messages: [{ role: 'user', content: 'Ada Lovelace was 36.' }],
       outputSchema: z.object({ name: z.string(), age: z.number() }),
     });
